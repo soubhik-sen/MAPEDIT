@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Map Area Drawing Mockup</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+  <style>
+    body { margin: 0; padding: 0; font-family: sans-serif; }
+    #container {
+      display: flex;
+      height: 100vh;
+    }
+    #map {
+      flex: 1;
+    }
+    #sidebar {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #f0f0f0;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+      white-space: pre-wrap;
+    }
+    button, input[type="file"] {
+      margin-top: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="container">
+  <div id="map"></div>
+  <div id="sidebar">
+    <h4>GeoJSON Areas</h4>
+    <div id="output">Draw something...</div>
+    <input type="file" id="upload" accept="application/json">
+    <button onclick="downloadGeoJSON()">Download JSON</button>
+    <button onclick="clearMap()">Clear Map</button>
+  </div>
+</div>
+
+<script>
+const map = L.map('map').setView([52.52, 13.405], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+const drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+const drawControl = new L.Control.Draw({
+  edit: { featureGroup: drawnItems },
+  draw: { polygon: true, rectangle: true, polyline: false, circle: false, marker: false }
+});
+map.addControl(drawControl);
+
+let geojsonCollection = [];
+
+function generateGUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+map.on(L.Draw.Event.CREATED, function (e) {
+    const layer = e.layer;
+    drawnItems.addLayer(layer);
+
+    const geojson = layer.toGeoJSON();
+    const name = prompt("Enter Area Name:") || `Area ${geojsonCollection.length + 1}`;
+    const guid = generateGUID();
+
+    geojson.properties = {
+      name: name,
+      guid: guid
+    };
+
+    const dataToStore = {
+        name: name,
+        guid: guid,
+        geojson: geojson
+    };
+
+    geojsonCollection.push(dataToStore);
+    layer.bindTooltip(name).openTooltip();
+    updateOutput();
+});
+
+function updateOutput() {
+  const output = document.getElementById('output');
+  output.textContent = JSON.stringify(geojsonCollection, null, 2);
+}
+
+function downloadGeoJSON() {
+  const blob = new Blob([JSON.stringify(geojsonCollection, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'drawn_areas.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearMap() {
+  drawnItems.clearLayers();
+  geojsonCollection = [];
+  updateOutput();
+}
+
+// Upload logic
+const uploadInput = document.getElementById('upload');
+uploadInput.addEventListener('change', function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      geojsonCollection = [];
+      drawnItems.clearLayers();
+
+      data.forEach(item => {
+        const geojsonLayer = L.geoJSON(item.geojson);
+        geojsonLayer.eachLayer(layer => {
+          drawnItems.addLayer(layer);
+          layer.bindTooltip(item.name).openTooltip();
+        });
+        geojsonCollection.push(item);
+      });
+
+      updateOutput();
+    } catch (err) {
+      alert('Invalid JSON');
+    }
+  };
+  reader.readAsText(file);
+});
+map.on(L.Draw.Event.EDITED, function (e) {
+  // Clear and rebuild geojsonCollection from edited layers
+  geojsonCollection = [];
+  drawnItems.eachLayer(layer => {
+    const geojson = layer.toGeoJSON();
+    const props = geojson.properties || {};
+    geojsonCollection.push({
+      name: props.name || 'Unnamed Area',
+      guid: props.guid || generateGUID(),
+      geojson: geojson
+    });
+    layer.bindTooltip(props.name || 'Unnamed Area');
+  });
+  updateOutput();
+});
+
+map.on(L.Draw.Event.DELETED, function (e) {
+  // Clear and rebuild geojsonCollection from remaining layers
+  geojsonCollection = [];
+  drawnItems.eachLayer(layer => {
+    const geojson = layer.toGeoJSON();
+    const props = geojson.properties || {};
+    geojsonCollection.push({
+      name: props.name || 'Unnamed Area',
+      guid: props.guid || generateGUID(),
+      geojson: geojson
+    });
+    layer.bindTooltip(props.name || 'Unnamed Area');
+  });
+  updateOutput();
+});
+
+</script>
+
+</body>
+</html>
