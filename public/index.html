@@ -10,6 +10,9 @@
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+ 
+  <script src="https://app.unpkg.com/terraformer@1.0.12/files/terraformer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@terraformer/wkt@2.2.1/dist/t-wkt.umd.min.js"></script>
 
   <style>
     body { margin: 0; padding: 0; font-family: sans-serif; }
@@ -89,14 +92,15 @@ map.on(L.Draw.Event.CREATED, function (e) {
     const name = prompt("Enter Area Name:") || `Area ${geojsonCollection.length + 1}`;
     const guid = generateGUID();
 
-    geojson.properties = {
+    /* geojson.properties = {
       name: name,
       guid: guid
-    };
+    }; */
 
     const dataToStore = {
         name: name,
         guid: guid,
+        wkt: Terraformer.geojsonToWKT(geojson.geometry),
         geojson: geojson
     };
 
@@ -107,7 +111,15 @@ map.on(L.Draw.Event.CREATED, function (e) {
 
 function updateOutput() {
   const output = document.getElementById('output');
-  output.textContent = JSON.stringify(geojsonCollection, null, 2);
+  const dataWithWKT = geojsonCollection.map(item => {
+    return {
+      name: item.name,
+      guid: item.guid,
+      wkt: Terraformer.geojsonToWKT(item.geojson.geometry),
+      geojson: item.geojson
+    };
+  });
+  output.textContent = JSON.stringify(dataWithWKT, null, 2);
 }
 
 function downloadGeoJSON() {
